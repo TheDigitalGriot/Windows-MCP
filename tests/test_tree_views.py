@@ -67,8 +67,8 @@ class TestTreeState:
         ts = TreeState(interactive_nodes=[sample_tree_element_node])
         result = ts.interactive_elements_to_string()
         lines = result.split("\n")
-        assert lines[0] == "# id|window|control_type|name|coords|focus"
-        assert lines[1] == "0|Notepad|Button|OK|(200,100)|True"
+        assert lines[0] == "# id|window|control_type|name|coords|metadata"
+        assert lines[1] == '0|Notepad|Button|OK|(200,100)|{"value": "", "shortcut": "Alt+O", "has_focused": true}'
 
     def test_interactive_elements_indices(self, sample_tree_element_node):
         node2 = TreeElementNode(
@@ -98,10 +98,11 @@ class TestTreeState:
         result = ts.scrollable_elements_to_string()
         lines = result.split("\n")
         assert (
-            lines[0] == "# id|window|control_type|name|coords|h_scroll|h_pct|v_scroll|v_pct|focus"
+            lines[0] == "# id|window|control_type|name|coords|metadata"
         )
         # base_index = len(interactive_nodes) = 1
         assert lines[1].startswith("1|")
+        assert '"vertical_scroll_percent": 42.5' in lines[1]
 
     def test_scrollable_elements_base_index_offset(self, sample_scroll_element_node):
         bb = BoundingBox(left=0, top=0, right=10, bottom=10, width=10, height=10)
@@ -120,7 +121,7 @@ class TestTreeState:
 class TestTreeElementNode:
     def test_to_row(self, sample_tree_element_node):
         row = sample_tree_element_node.to_row(0)
-        assert row == [0, "Notepad", "Button", "OK", "", "Alt+O", "(200,100)", True]
+        assert row == [0, "Notepad", "Button", "OK", "(200,100)"]
 
     def test_update_from_node(self, sample_tree_element_node):
         target = TreeElementNode(
@@ -131,10 +132,9 @@ class TestTreeElementNode:
         assert target.name == "OK"
         assert target.control_type == "Button"
         assert target.window_name == "Notepad"
-        assert target.value == ""
-        assert target.shortcut == "Alt+O"
-        assert target.xpath == "/Pane/Button"
-        assert target.is_focused is True
+        assert target.metadata["value"] == ""
+        assert target.metadata["shortcut"] == "Alt+O"
+        assert target.metadata["has_focused"] is True
         assert target.bounding_box is sample_tree_element_node.bounding_box
         assert target.center is sample_tree_element_node.center
 
@@ -147,8 +147,6 @@ class TestScrollElementNode:
         assert row[2] == "Pane"
         assert row[3] == "Document"
         assert row[4] == "(200,100)"
-        assert row[5] is False  # horizontal_scrollable
-        assert row[6] == 0.0  # horizontal_scroll_percent
-        assert row[7] is True  # vertical_scrollable
-        assert row[8] == 42.5  # vertical_scroll_percent
-        assert row[9] is False  # is_focused
+        import json
+        metadata = json.loads(row[5])
+        assert metadata["vertical_scroll_percent"] == 42.5

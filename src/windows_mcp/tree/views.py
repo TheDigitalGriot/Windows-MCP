@@ -4,8 +4,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+import json
+
 @dataclass
 class TreeState:
+    status: bool = True
     root_node: "TreeElementNode" | None = None
     dom_node: "ScrollElementNode" | None = None
     interactive_nodes: list["TreeElementNode"] = field(default_factory=list)
@@ -17,10 +20,10 @@ class TreeState:
             return "No interactive elements"
         # TOON-like format: Pipe-separated values with clear header
         # Using abbreviations in header to save tokens
-        header = "# id|window|control_type|name|coords|focus"
+        header = "# id|window|control_type|name|coords|metadata"
         rows = [header]
         for idx, node in enumerate(self.interactive_nodes):
-            row = f"{idx}|{node.window_name}|{node.control_type}|{node.name}|{node.center.to_string()}|{node.is_focused}"
+            row = f"{idx}|{node.window_name}|{node.control_type}|{node.name}|{node.center.to_string()}|{json.dumps(node.metadata)}"
             rows.append(row)
         return "\n".join(rows)
 
@@ -28,14 +31,13 @@ class TreeState:
         if not self.scrollable_nodes:
             return "No scrollable elements"
         # TOON-like format
-        header = "# id|window|control_type|name|coords|h_scroll|h_pct|v_scroll|v_pct|focus"
+        header = "# id|window|control_type|name|coords|metadata"
         rows = [header]
         base_index = len(self.interactive_nodes)
         for idx, node in enumerate(self.scrollable_nodes):
             row = (
                 f"{base_index + idx}|{node.window_name}|{node.control_type}|{node.name}|"
-                f"{node.center.to_string()}|{node.horizontal_scrollable}|{node.horizontal_scroll_percent}|"
-                f"{node.vertical_scrollable}|{node.vertical_scroll_percent}|{node.is_focused}"
+                f"{node.center.to_string()}|{json.dumps(node.metadata)}"
             )
             rows.append(row)
         return "\n".join(rows)
@@ -93,21 +95,15 @@ class TreeElementNode:
     name: str = ""
     control_type: str = ""
     window_name: str = ""
-    value: str = ""
-    shortcut: str = ""
-    xpath: str = ""
-    is_focused: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def update_from_node(self, node: "TreeElementNode"):
         self.name = node.name
         self.control_type = node.control_type
         self.window_name = node.window_name
-        self.value = node.value
-        self.shortcut = node.shortcut
         self.bounding_box = node.bounding_box
         self.center = node.center
-        self.xpath = node.xpath
-        self.is_focused = node.is_focused
+        self.metadata = node.metadata
 
     # Legacy method kept for compatibility if needed, but not used in new format
     def to_row(self, index: int):
@@ -116,10 +112,7 @@ class TreeElementNode:
             self.window_name,
             self.control_type,
             self.name,
-            self.value,
-            self.shortcut,
             self.center.to_string(),
-            self.is_focused,
         ]
 
 
@@ -127,15 +120,10 @@ class TreeElementNode:
 class ScrollElementNode:
     name: str
     control_type: str
-    xpath: str
     window_name: str
     bounding_box: BoundingBox
     center: Center
-    horizontal_scrollable: bool
-    horizontal_scroll_percent: float
-    vertical_scrollable: bool
-    vertical_scroll_percent: float
-    is_focused: bool
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     # Legacy method kept for compatibility
     def to_row(self, index: int, base_index: int):
@@ -145,11 +133,7 @@ class ScrollElementNode:
             self.control_type,
             self.name,
             self.center.to_string(),
-            self.horizontal_scrollable,
-            self.horizontal_scroll_percent,
-            self.vertical_scrollable,
-            self.vertical_scroll_percent,
-            self.is_focused,
+            json.dumps(self.metadata)
         ]
 
 

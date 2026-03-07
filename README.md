@@ -397,9 +397,7 @@ MCP Client can access the following tools to interact with Windows:
 - `MultiEdit`: Enter text into multiple input fields at specified coordinates.
 - `Clipboard`: Read or set Windows clipboard content.
 - `Process`: List running processes or terminate them by PID or name.
-- `SystemInfo`: Get system information including CPU, memory, disk, network stats, and uptime.
 - `Notification`: Send a Windows toast notification with a title and message.
-- `LockScreen`: Lock the Windows workstation.
 - `Registry`: Read, write, delete, or list Windows Registry values and keys.
 
 ## 🤝 Connect with Us

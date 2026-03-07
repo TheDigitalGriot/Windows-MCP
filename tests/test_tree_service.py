@@ -1,10 +1,8 @@
-from types import SimpleNamespace
 from unittest.mock import MagicMock
-
 import pytest
-
 from windows_mcp.desktop.views import Size
 from windows_mcp.tree.service import Tree
+from windows_mcp.uia import Rect
 
 
 @pytest.fixture
@@ -37,8 +35,8 @@ class TestAppNameCorrection:
 
 class TestIouBoundingBox:
     def test_full_overlap(self, tree_instance):
-        window = SimpleNamespace(left=0, top=0, right=500, bottom=500)
-        element = SimpleNamespace(left=100, top=100, right=200, bottom=200)
+        window = Rect(0, 0, 500, 500)
+        element = Rect(100, 100, 200, 200)
         result = tree_instance.iou_bounding_box(window, element)
         assert result.left == 100
         assert result.top == 100
@@ -48,8 +46,8 @@ class TestIouBoundingBox:
         assert result.height == 100
 
     def test_partial_overlap(self, tree_instance):
-        window = SimpleNamespace(left=0, top=0, right=150, bottom=150)
-        element = SimpleNamespace(left=100, top=100, right=200, bottom=200)
+        window = Rect(0, 0, 150, 150)
+        element = Rect(100, 100, 200, 200)
         result = tree_instance.iou_bounding_box(window, element)
         assert result.left == 100
         assert result.top == 100
@@ -59,16 +57,16 @@ class TestIouBoundingBox:
         assert result.height == 50
 
     def test_no_overlap(self, tree_instance):
-        window = SimpleNamespace(left=0, top=0, right=50, bottom=50)
-        element = SimpleNamespace(left=100, top=100, right=200, bottom=200)
+        window = Rect(0, 0, 50, 50)
+        element = Rect(100, 100, 200, 200)
         result = tree_instance.iou_bounding_box(window, element)
         assert result.width == 0
         assert result.height == 0
 
     def test_screen_clamping(self, tree_instance):
         # Element extends beyond screen (1920x1080)
-        window = SimpleNamespace(left=0, top=0, right=2000, bottom=2000)
-        element = SimpleNamespace(left=1900, top=1060, right=2000, bottom=1200)
+        window = Rect(0, 0, 2000, 2000)
+        element = Rect(1900, 1060, 2000, 1200)
         result = tree_instance.iou_bounding_box(window, element)
         assert result.left == 1900
         assert result.top == 1060

@@ -56,7 +56,7 @@ async def lifespan(app: FastMCP):
     desktop = Desktop()
     watchdog = WatchDog()
     screen_size = desktop.get_screen_size()
-    watchdog.set_focus_callback(desktop.tree._on_focus_change)
+    watchdog.set_focus_callback(desktop.tree.on_focus_change)
 
     try:
         watchdog.start()
@@ -239,12 +239,10 @@ def state_tool(use_vision:bool|str=False,use_dom:bool|str=False, ctx: Context = 
 @mcp.tool(
     name="Click",
     description=(
-        "Performs mouse clicks at specified coordinates [x, y]. "
+        "Performs mouse clicks at specified coordinates [x, y] or passing a UI element's label/id. "
         "Supports button types: 'left' for selection/activation, 'right' for context menus, 'middle'. "
         "Supports clicks: 0=hover only (no click), 1=single click (select/focus), 2=double click (open/activate). "
-        "Optionally: pass element_name to find and click a UI element by its accessible name "
-        "(using Windows UI Automation), no coordinates needed. "
-        "Use window_title to scope the search to a specific window."
+        "Provide either loc or label."
     ),
     annotations=ToolAnnotations(
         title="Click",
@@ -257,10 +255,20 @@ def state_tool(use_vision:bool|str=False,use_dom:bool|str=False, ctx: Context = 
 @with_analytics(analytics, "Click-Tool")
 def click_tool(
     loc: list[int] | None = None,
+    label: int | None = None,
     button: Literal["left", "right", "middle"] = "left",
     clicks: int = 1,
     ctx: Context = None,
 ) -> str:
+    if loc is None and label is None:
+        raise ValueError("Either loc or label must be provided.")
+    if label is not None:
+        if desktop.desktop_state is None:
+            raise ValueError("Desktop state is empty. Please call Snapshot first.")
+        try:
+            loc = list(desktop.get_coordinates_from_label(label))
+        except Exception as e:
+            raise ValueError(f"Failed to find element with label {label}: {e}")
     if len(loc) != 2:
         raise ValueError("Location must be a list of exactly 2 integers [x, y]")
     x, y = loc[0], loc[1]
@@ -271,7 +279,7 @@ def click_tool(
 
 @mcp.tool(
     name="Type",
-    description="Types text at specified coordinates [x, y]. Set clear=True to clear existing text first, False to append. Set press_enter=True to submit after typing. Set caret_position to 'start' (beginning), 'end' (end), or 'idle' (default).",
+    description="Types text at specified coordinates [x, y] or passing a UI element's label/id. Set clear=True to clear existing text first, False to append. Set press_enter=True to submit after typing. Set caret_position to 'start' (beginning), 'end' (end), or 'idle' (default). Provide either loc or label.",
     annotations=ToolAnnotations(
         title="Type",
         readOnlyHint=False,
@@ -282,13 +290,23 @@ def click_tool(
 )
 @with_analytics(analytics, "Type-Tool")
 def type_tool(
-    loc: list[int],
     text: str,
+    loc: list[int] | None = None,
+    label: int | None = None,
     clear: bool | str = False,
     caret_position: Literal["start", "idle", "end"] = "idle",
     press_enter: bool | str = False,
     ctx: Context = None,
 ) -> str:
+    if loc is None and label is None:
+        raise ValueError("Either loc or label must be provided.")
+    if label is not None:
+        if desktop.desktop_state is None:
+            raise ValueError("Desktop state is empty. Please call Snapshot first.")
+        try:
+            loc = list(desktop.get_coordinates_from_label(label))
+        except Exception as e:
+            raise ValueError(f"Failed to find element with label {label}: {e}")
     if len(loc) != 2:
         raise ValueError("Location must be a list of exactly 2 integers [x, y]")
     x, y = loc[0], loc[1]
@@ -304,7 +322,7 @@ def type_tool(
 
 @mcp.tool(
     name="Scroll",
-    description="Scrolls at coordinates [x, y] or current mouse position if loc=None. Type: vertical (default) or horizontal. Direction: up/down for vertical, left/right for horizontal. wheel_times controls amount (1 wheel ≈ 3-5 lines). Use for navigating long content, lists, and web pages.",
+    description="Scrolls at coordinates [x, y], a UI element's label/id, or current mouse position if loc=None. Type: vertical (default) or horizontal. Direction: up/down for vertical, left/right for horizontal. wheel_times controls amount (1 wheel ≈ 3-5 lines). Use for navigating long content, lists, and web pages.",
     annotations=ToolAnnotations(
         title="Scroll",
         readOnlyHint=False,
@@ -315,12 +333,20 @@ def type_tool(
 )
 @with_analytics(analytics, "Scroll-Tool")
 def scroll_tool(
-    loc: list[int] = None,
+    loc: list[int] | None = None,
+    label: int | None = None,
     type: Literal["horizontal", "vertical"] = "vertical",
     direction: Literal["up", "down", "left", "right"] = "down",
     wheel_times: int = 1,
     ctx: Context = None,
 ) -> str:
+    if label is not None:
+        if desktop.desktop_state is None:
+            raise ValueError("Desktop state is empty. Please call Snapshot first.")
+        try:
+            loc = list(desktop.get_coordinates_from_label(label))
+        except Exception as e:
+            raise ValueError(f"Failed to find element with label {label}: {e}")
     if loc and len(loc) != 2:
         raise ValueError("Location must be a list of exactly 2 integers [x, y]")
     response = desktop.scroll(loc, type, direction, wheel_times)
@@ -336,9 +362,10 @@ def scroll_tool(
 @mcp.tool(
     name="Move",
     description=(
-        "Moves mouse cursor to coordinates [x, y]. "
+        "Moves mouse cursor to coordinates [x, y] or passing a UI element's label/id. "
         "Set drag=True to perform a drag-and-drop operation from the current mouse position "
         "to the target coordinates. Default (drag=False) is a simple cursor move (hover). "
+        "Provide either loc or label."
     ),
     annotations=ToolAnnotations(
         title="Move",
@@ -351,13 +378,21 @@ def scroll_tool(
 @with_analytics(analytics, "Move-Tool")
 def move_tool(
     loc: list[int] | None = None,
+    label: int | None = None,
     drag: bool | str = False,
     ctx: Context = None,
 ) -> str:
     drag = drag is True or (isinstance(drag, str) and drag.lower() == "true")
-    if loc is None:
-        raise ValueError("loc must be provided.")
-    elif len(loc) != 2:
+    if loc is None and label is None:
+        raise ValueError("Either loc or label must be provided.")
+    if label is not None:
+        if desktop.desktop_state is None:
+            raise ValueError("Desktop state is empty. Please call Snapshot first.")
+        try:
+            loc = list(desktop.get_coordinates_from_label(label))
+        except Exception as e:
+            raise ValueError(f"Failed to find element with label {label}: {e}")
+    if len(loc) != 2:
         raise ValueError("loc must be a list of exactly 2 integers [x, y]")
     x, y = loc[0], loc[1]
     if drag:
@@ -436,7 +471,7 @@ def scrape_tool(url: str, use_dom: bool | str = False, ctx: Context = None) -> s
 
 @mcp.tool(
     name="MultiSelect",
-    description="Selects multiple items such as files, folders, or checkboxes if press_ctrl=True, or performs multiple clicks if False.",
+    description="Selects multiple items such as files, folders, or checkboxes if press_ctrl=True, or performs multiple clicks if False. Pass locs (list of coordinates) or labels (list of UI element labels/ids).",
     annotations=ToolAnnotations(
         title="MultiSelect",
         readOnlyHint=False,
@@ -447,8 +482,23 @@ def scrape_tool(url: str, use_dom: bool | str = False, ctx: Context = None) -> s
 )
 @with_analytics(analytics, "Multi-Select-Tool")
 def multi_select_tool(
-    locs: list[list[int]], press_ctrl: bool | str = True, ctx: Context = None
+    locs: list[list[int]] | None = None,
+    labels: list[int] | None = None,
+    press_ctrl: bool | str = True,
+    ctx: Context = None
 ) -> str:
+    if locs is None and labels is None:
+        raise ValueError("Either locs or labels must be provided.")
+    locs = locs or []
+    if labels is not None:
+        if desktop.desktop_state is None:
+            raise ValueError("Desktop state is empty. Please call Snapshot first.")
+        for label in labels:
+            try:
+                locs.append(list(desktop.get_coordinates_from_label(label)))
+            except Exception as e:
+                raise ValueError(f"Failed to find element with label {label}: {e}")
+                
     press_ctrl = press_ctrl is True or (
         isinstance(press_ctrl, str) and press_ctrl.lower() == "true"
     )
@@ -459,7 +509,7 @@ def multi_select_tool(
 
 @mcp.tool(
     name="MultiEdit",
-    description="Enters text into multiple input fields at specified coordinates [[x,y,text], ...].",
+    description="Enters text into multiple input fields at specified coordinates locs=[[x,y,text], ...] or using labels=[[label,text], ...]. Provide either locs or labels.",
     annotations=ToolAnnotations(
         title="MultiEdit",
         readOnlyHint=False,
@@ -469,7 +519,27 @@ def multi_select_tool(
     ),
 )
 @with_analytics(analytics, "Multi-Edit-Tool")
-def multi_edit_tool(locs: list[list], ctx: Context = None) -> str:
+def multi_edit_tool(
+    locs: list[list] | None = None,
+    labels: list[list] | None = None,
+    ctx: Context = None
+) -> str:
+    if locs is None and labels is None:
+        raise ValueError("Either locs or labels must be provided.")
+    locs = locs or []
+    if labels is not None:
+        if desktop.desktop_state is None:
+            raise ValueError("Desktop state is empty. Please call Snapshot first.")
+        for item in labels:
+            if len(item) != 2:
+                raise ValueError(f"Each label item must be [label, text]. Invalid: {item}")
+            try:
+                label, text = int(item[0]), item[1]
+                loc = list(desktop.get_coordinates_from_label(label))
+                locs.append([loc[0], loc[1], text])
+            except Exception as e:
+                raise ValueError(f"Failed to process label item {item}: {e}")
+                
     desktop.multi_edit(locs)
     elements_str = ", ".join([f"({e[0]},{e[1]}) with text '{e[2]}'" for e in locs])
     return f"Multi-edited elements at: {elements_str}"
@@ -552,24 +622,6 @@ def process_tool(
         return f"Error managing processes: {str(e)}"
 
 
-@mcp.tool(
-    name="SystemInfo",
-    description="Returns system information including CPU usage, memory usage, disk space, network stats, and uptime. Useful for monitoring system health remotely.",
-    annotations=ToolAnnotations(
-        title="SystemInfo",
-        readOnlyHint=True,
-        destructiveHint=False,
-        idempotentHint=True,
-        openWorldHint=False,
-    ),
-)
-@with_analytics(analytics, "SystemInfo-Tool")
-def system_info_tool(ctx: Context = None) -> str:
-    try:
-        return desktop.get_system_info()
-    except Exception as e:
-        return f"Error getting system info: {str(e)}"
-
 
 @mcp.tool(
     name="Notification",
@@ -589,24 +641,6 @@ def notification_tool(title: str, message: str, ctx: Context = None) -> str:
     except Exception as e:
         return f"Error sending notification: {str(e)}"
 
-
-@mcp.tool(
-    name="LockScreen",
-    description="Locks the Windows workstation. Requires the user to enter their password to unlock.",
-    annotations=ToolAnnotations(
-        title="LockScreen",
-        readOnlyHint=False,
-        destructiveHint=False,
-        idempotentHint=False,
-        openWorldHint=False,
-    ),
-)
-@with_analytics(analytics, "LockScreen-Tool")
-def lock_screen_tool(ctx: Context = None) -> str:
-    try:
-        return desktop.lock_screen()
-    except Exception as e:
-        return f"Error locking screen: {str(e)}"
 
 
 @mcp.tool(

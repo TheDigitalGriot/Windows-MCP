@@ -361,14 +361,12 @@ class Desktop:
             if status == 0 and response.strip().isdigit():
                 pid = int(response.strip())
         else:
-            if (
-                not appid.replace("\\", "")
-                .replace("_", "")
-                .replace(".", "")
-                .replace("-", "")
-                .isalnum()
-            ):
+            # Validate appid format (allow UWP IDs like Microsoft.WindowsNotepad_...!App)
+            # Chars to ignore for validation: \ , _ , . , - , !
+            validation_id = appid.replace("\\", "").replace("_", "").replace(".", "").replace("-", "").replace("!", "")
+            if not validation_id.isalnum():
                 return (f"Invalid app identifier: {appid}", 1, 0)
+            
             safe = ps_quote(f"shell:AppsFolder\\{appid}")
             command = f"Start-Process {safe}"
             response, status = self.execute_command(command)
@@ -463,17 +461,17 @@ class Desktop:
         except Exception as e:
             logger.exception(f"Failed to bring window to top: {e}")
 
-    def get_element_handle_from_label(self, label: int) -> uia.Control:
-        tree_state = self.desktop_state.tree_state
-        element_node = tree_state.interactive_nodes[label]
-        xpath = element_node.xpath
-        element_handle = self.get_element_from_xpath(xpath)
-        return element_handle
-
     def get_coordinates_from_label(self, label: int) -> tuple[int, int]:
-        element_handle = self.get_element_handle_from_label(label)
-        bounding_rectangle = element_handle.BoundingRectangle
-        return bounding_rectangle.xcenter(), bounding_rectangle.ycenter()
+        tree_state = self.desktop_state.tree_state
+        if label < len(tree_state.interactive_nodes):
+            element_node = tree_state.interactive_nodes[label]
+        else:
+            scroll_idx = label - len(tree_state.interactive_nodes)
+            if scroll_idx < len(tree_state.scrollable_nodes):
+                element_node = tree_state.scrollable_nodes[scroll_idx]
+            else:
+                raise IndexError(f"Label {label} out of range")
+        return element_node.center.x, element_node.center.y
 
     def click(self, loc: tuple[int, int]|list[int], button: str = "left", clicks: int = 2):
         if isinstance(loc, list):
@@ -562,7 +560,6 @@ class Desktop:
             x, y = loc[0], loc[1]
         else:
             x, y = loc
-        x, y = loc
         sleep(0.5)
         cx, cy = uia.GetCursorPos()
         uia.DragDrop(cx, cy, x, y, moveSpeed=1)
@@ -800,24 +797,7 @@ class Desktop:
         xpath = "/".join(path_parts)
         return xpath
 
-    def get_element_from_xpath(self, xpath: str) -> uia.Control:
-        pattern = re.compile(r"(\w+)(?:\[(\d+)\])?")
-        parts = xpath.split("/")
-        root = uia.GetRootControl()
-        element = root
-        for part in parts[1:]:
-            match = pattern.fullmatch(part)
-            if match is None:
-                continue
-            control_type, index = match.groups()
-            index = int(index) if index else None
-            children = element.GetChildren()
-            same_type_children = list(filter(lambda x: x.ControlTypeName == control_type, children))
-            if index:
-                element = same_type_children[index - 1]
-            else:
-                element = same_type_children[0]
-        return element
+
 
     def get_windows_version(self) -> str:
         response, status = self.execute_command("(Get-CimInstance Win32_OperatingSystem).Caption")
@@ -1029,35 +1009,9 @@ class Desktop:
             return f'No process matching "{name}" found or access denied.'
         return f"{'Force killed' if force else 'Terminated'}: {', '.join(killed)}"
 
-    def lock_screen(self) -> str:
-        ctypes.windll.user32.LockWorkStation()
-        return "Screen locked."
 
-    def get_system_info(self) -> str:
-        import psutil
-        import platform
-        from datetime import datetime, timedelta
 
-        cpu_pct = psutil.cpu_percent(interval=1)
-        cpu_count = psutil.cpu_count()
-        mem = psutil.virtual_memory()
-        disk = psutil.disk_usage("C:\\")
-        boot = datetime.fromtimestamp(psutil.boot_time())
-        uptime = datetime.now() - boot
-        uptime_str = str(timedelta(seconds=int(uptime.total_seconds())))
-        net = psutil.net_io_counters()
-        from textwrap import dedent
 
-        return dedent(f"""System Information:
-  OS: {platform.system()} {platform.release()} ({platform.version()})
-  Machine: {platform.machine()}
-
-  CPU: {cpu_pct}% ({cpu_count} cores)
-  Memory: {mem.percent}% used ({round(mem.used / 1024**3, 1)} / {round(mem.total / 1024**3, 1)} GB)
-  Disk C: {disk.percent}% used ({round(disk.used / 1024**3, 1)} / {round(disk.total / 1024**3, 1)} GB)
-
-  Network: ↑ {round(net.bytes_sent / 1024**2, 1)} MB sent, ↓ {round(net.bytes_recv / 1024**2, 1)} MB received
-  Uptime: {uptime_str} (booted {boot.strftime("%Y-%m-%d %H:%M")})""")
 
     def registry_get(self, path: str, name: str) -> str:
         q_path = ps_quote(path)

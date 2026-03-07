@@ -22,10 +22,11 @@ def sample_tree_element_node(sample_bounding_box, sample_center):
         name="OK",
         control_type="Button",
         window_name="Notepad",
-        value="",
-        shortcut="Alt+O",
-        xpath="/Pane/Button",
-        is_focused=True,
+        metadata={
+            "value": "",
+            "shortcut": "Alt+O",
+            "has_focused": True,
+        },
     )
 
 
@@ -34,15 +35,16 @@ def sample_scroll_element_node(sample_bounding_box, sample_center):
     return ScrollElementNode(
         name="Document",
         control_type="Pane",
-        xpath="/Pane/ScrollViewer",
         window_name="Notepad",
         bounding_box=sample_bounding_box,
         center=sample_center,
-        horizontal_scrollable=False,
-        horizontal_scroll_percent=0.0,
-        vertical_scrollable=True,
-        vertical_scroll_percent=42.5,
-        is_focused=False,
+        metadata={
+            "horizontal_scrollable": False,
+            "horizontal_scroll_percent": 0.0,
+            "vertical_scrollable": True,
+            "vertical_scroll_percent": 42.5,
+            "has_focused": False,
+        },
     )
 
 
