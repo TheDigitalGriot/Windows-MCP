@@ -178,7 +178,7 @@ def file_system_tool(
 
 @mcp.tool(
     name='Snapshot',
-    description='Captures complete desktop state including: system language, focused/opened windows, interactive elements (buttons, text fields, links, menus with coordinates), and scrollable areas. Set use_vision=True to include screenshot. Set use_dom=True for browser content to get web page elements instead of browser UI. Always call this first to understand the current desktop state before taking actions.',
+    description='Captures complete desktop state including: system language, focused/opened windows, interactive elements (buttons, text fields, links, menus with coordinates), and scrollable areas. Set use_vision=True to include screenshot with cursor highlight. Set width_reference_lines/height_reference_lines to overlay a grid for better spatial reasoning (make sure vision is enabled to use it). Set use_dom=True for browser content to get web page elements instead of browser UI. Always call this first to understand the current desktop state before taking actions.',
     annotations=ToolAnnotations(
         title="Snapshot",
         readOnlyHint=True,
@@ -188,17 +188,27 @@ def file_system_tool(
     ),
 )
 @with_analytics(analytics, "State-Tool")
-def state_tool(use_vision:bool|str=False,use_dom:bool|str=False, ctx: Context = None):
+def state_tool(
+    use_vision: bool | str = False, 
+    use_dom: bool | str = False, 
+    width_reference_line: int | None = None,
+    height_reference_line: int | None = None,
+    ctx: Context = None
+):
     try:
         use_vision = use_vision is True or (isinstance(use_vision, str) and use_vision.lower() == 'true')
         use_dom = use_dom is True or (isinstance(use_dom, str) and use_dom.lower() == 'true')
+        
+        grid_lines = None
+        if width_reference_line and height_reference_line:
+            grid_lines = (int(width_reference_line), int(height_reference_line))
         
         # Calculate scale factor to cap resolution at 1080p (1920x1080)
         scale_width = MAX_IMAGE_WIDTH / screen_size.width if screen_size.width > MAX_IMAGE_WIDTH else 1.0
         scale_height = MAX_IMAGE_HEIGHT / screen_size.height if screen_size.height > MAX_IMAGE_HEIGHT else 1.0
         scale = min(scale_width, scale_height)
         
-        desktop_state=desktop.get_state(use_vision=use_vision,use_dom=use_dom,as_bytes=False,scale=scale)
+        desktop_state=desktop.get_state(use_vision=use_vision,use_dom=use_dom,as_bytes=False,scale=scale, grid_lines=grid_lines)
         
         interactive_elements=desktop_state.tree_state.interactive_elements_to_string()
         scrollable_elements=desktop_state.tree_state.scrollable_elements_to_string()
@@ -217,7 +227,12 @@ def state_tool(use_vision:bool|str=False,use_dom:bool|str=False, ctx: Context = 
     except Exception as e:
         return [f'Error capturing desktop state: {str(e)}. Please try again.']
     
+    metadata_text = f"Cursor Position: {desktop_state.cursor_position}\n"
+    if desktop_state.screenshot_size:
+        metadata_text += f"Screenshot Resolution: {desktop_state.screenshot_size.to_string()}\n"
+
     return [dedent(f'''
+    {metadata_text}
     Active Desktop:
     {active_desktop}
 

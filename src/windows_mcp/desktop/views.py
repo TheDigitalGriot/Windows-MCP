@@ -61,6 +61,8 @@ class DesktopState:
     active_window: Window | None
     windows: list[Window]
     screenshot: Image | None = None
+    cursor_position: tuple[int, int] | None = None
+    screenshot_size: Size | None = None
     tree_state: TreeState | None = None
 
     def active_desktop_to_string(self):

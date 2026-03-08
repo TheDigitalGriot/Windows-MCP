@@ -79,6 +79,7 @@ class Desktop:
         use_dom: bool | str = False,
         as_bytes: bool | str = False,
         scale: float = 1.0,
+        grid_lines: tuple[int, int] | None = None,
     ) -> DesktopState:
         use_annotation = use_annotation is True or (
             isinstance(use_annotation, str) and use_annotation.lower() == "true"
@@ -95,6 +96,8 @@ class Desktop:
         windows, windows_handles = self.get_windows(controls_handles=controls_handles)  # Apps
         active_window = self.get_active_window(windows=windows)  # Active Window
         active_window_handle = active_window.handle if active_window else None
+        
+        cursor_position = self.get_cursor_location()
 
         try:
             active_desktop = get_current_desktop()
@@ -119,10 +122,15 @@ class Desktop:
             active_window_handle, other_windows_handles, use_dom=use_dom
         )
 
+        screenshot_size = None
         if use_vision:
             if use_annotation:
                 nodes = tree_state.interactive_nodes
-                screenshot = self.get_annotated_screenshot(nodes=nodes)
+                screenshot = self.get_annotated_screenshot(
+                    nodes=nodes, 
+                    cursor_pos=cursor_position,
+                    grid_lines=grid_lines
+                )
             else:
                 screenshot = self.get_screenshot()
 
@@ -131,6 +139,8 @@ class Desktop:
                     (int(screenshot.width * scale), int(screenshot.height * scale)),
                     Image.LANCZOS,
                 )
+            
+            screenshot_size = Size(width=screenshot.width, height=screenshot.height)
 
             if as_bytes:
                 buffered = io.BytesIO()
@@ -146,6 +156,8 @@ class Desktop:
             active_desktop=active_desktop,
             all_desktops=all_desktops,
             screenshot=screenshot,
+            cursor_position=cursor_position,
+            screenshot_size=screenshot_size,
             tree_state=tree_state,
         )
         # Log the time taken to capture the state
@@ -843,7 +855,12 @@ class Desktop:
             logger.warning("Failed to capture virtual screen, using primary screen")
             return ImageGrab.grab()
 
-    def get_annotated_screenshot(self, nodes: list[TreeElementNode]) -> Image.Image:
+    def get_annotated_screenshot(
+        self, 
+        nodes: list[TreeElementNode], 
+        cursor_pos: tuple[int, int] | None = None,
+        grid_lines: tuple[int, int] | None = None
+    ) -> Image.Image:
         screenshot = self.get_screenshot()
         # Add padding
         padding = 5
@@ -863,6 +880,16 @@ class Desktop:
             return "#{:06x}".format(random.randint(0, 0xFFFFFF))
 
         left_offset, top_offset, _, _ = uia.GetVirtualScreenRect()
+
+        # Draw grid lines if requested
+        if grid_lines:
+            w_count, h_count = grid_lines
+            for i in range(1, w_count):
+                x = padding + (screenshot.width * i // w_count)
+                draw.line([(x, padding), (x, padding + screenshot.height)], fill=(200, 200, 200, 128), width=1)
+            for i in range(1, h_count):
+                y = padding + (screenshot.height * i // h_count)
+                draw.line([(padding, y), (padding + screenshot.width, y)], fill=(200, 200, 200, 128), width=1)
 
         def draw_annotation(label, node: TreeElementNode):
             box = node.bounding_box
@@ -902,6 +929,26 @@ class Desktop:
         # Draw annotations in parallel
         with ThreadPoolExecutor() as executor:
             executor.map(draw_annotation, range(len(nodes)), nodes)
+
+        # Draw cursor highlight if pos provided
+        if cursor_pos:
+            cx, cy = cursor_pos
+            # Adjust for virtual screen offset and padding
+            acx = int(cx - left_offset) + padding
+            acy = int(cy - top_offset) + padding
+            
+            # Draw a distinctive marker (e.g., a circle or crosshair with a box)
+            r = 15
+            draw.ellipse([acx - r, acy - r, acx + r, acy + r], outline="red", width=3)
+            draw.line([acx - r, acy, acx + r, acy], fill="red", width=2)
+            draw.line([acx, acy - r, acx, acy + r], fill="red", width=2)
+            
+            # Draw "Cursor" label
+            c_label = "CURSOR"
+            c_label_width = draw.textlength(c_label, font=font)
+            draw.rectangle([acx + r, acy - r, acx + r + c_label_width + 4, acy - r + 16], fill="red")
+            draw.text((acx + r + 2, acy - r), c_label, fill="white", font=font)
+
         return padded_screenshot
 
     def send_notification(self, title: str, message: str) -> str:
