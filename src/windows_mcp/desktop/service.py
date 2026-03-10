@@ -444,11 +444,11 @@ class Desktop:
             window = windows.get(window_name)
             target_handle = window.handle
 
-            if uia.IsIconic(target_handle):
-                uia.ShowWindow(target_handle, win32con.SW_RESTORE)
-                content = f"{window_name.title()} restored from Minimized state."
+            was_minimized = uia.IsIconic(target_handle)
+            self.bring_window_to_top(target_handle)
+            if was_minimized:
+                content = f"Restored {window_name.title()} from minimized and switched to it."
             else:
-                self.bring_window_to_top(target_handle)
                 content = f"Switched to {window_name.title()} window."
             return content, 0
         except Exception as e:
